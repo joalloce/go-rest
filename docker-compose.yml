@@ -1,0 +1,27 @@
+version: "3.9"
+services:
+  go-fiber:
+    build: "./go-fiber"
+    depends_on:
+      - db
+    ports:
+      - 9200:3000
+    volumes:
+      - ./go-fiber:/app
+  
+  go-gin:
+    build: "./go-gin"
+    depends_on:
+      - db
+    ports:
+      - 9201:8080
+    volumes:
+      - ./go-gin:/app
+
+  db:
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=db
+    image: mysql:5.7.39
+    ports:
+      - 0.0.0.0:9300:3306
