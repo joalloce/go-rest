@@ -26,11 +26,11 @@ func setRouter() *gin.Engine {
 
 	userRepo := New()
 
-	r.POST("/users", userRepo.CreateUser)
-	r.GET("/users", userRepo.GetUsers)
-	r.GET("/users/:id", userRepo.GetUser)
-	r.PUT("/users/:id", userRepo.UpdateUser)
-	r.DELETE("/users/:id", userRepo.DeleteUser)
+	r.POST("/users", userRepo.createUser)
+	r.GET("/users", userRepo.getUsers)
+	r.GET("/users/:id", userRepo.getUser)
+	r.PUT("/users/:id", userRepo.updateUser)
+	r.DELETE("/users/:id", userRepo.deleteUser)
 
 	return r
 }
@@ -75,10 +75,14 @@ func New() *UserRepo {
 }
 
 // create user
-func (repository *UserRepo) CreateUser(context *gin.Context) {
+func (repository *UserRepo) createUser(context *gin.Context) {
 	var user User
-	context.BindJSON(&user)                  // take the data from body
-	err := repository.Db.Create(&user).Error // save user to db
+	err := context.BindJSON(&user) // take the data from body
+	if err != nil {
+		context.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+	err = repository.Db.Create(&user).Error // create user
 	if err != nil {
 		context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -87,9 +91,9 @@ func (repository *UserRepo) CreateUser(context *gin.Context) {
 }
 
 // get users
-func (repository *UserRepo) GetUsers(context *gin.Context) {
+func (repository *UserRepo) getUsers(context *gin.Context) {
 	var user []User
-	err := repository.Db.Find(&user).Error // get all users from db
+	err := repository.Db.Find(&user).Error // get all users
 	if err != nil {
 		context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -98,27 +102,31 @@ func (repository *UserRepo) GetUsers(context *gin.Context) {
 }
 
 // get user by id
-func (repository *UserRepo) GetUser(context *gin.Context) {
+func (repository *UserRepo) getUser(context *gin.Context) {
 	id, _ := strconv.Atoi(context.Param("id")) // take id from params
 	var user User
 	err := repository.Db.Where("id = ?", id).First(&user).Error // find user
 	if err != nil {
-		context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		context.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	context.JSON(http.StatusOK, user)
 }
 
 // update user
-func (repository *UserRepo) UpdateUser(context *gin.Context) {
+func (repository *UserRepo) updateUser(context *gin.Context) {
 	var user User
 	id, _ := strconv.Atoi(context.Param("id"))                  // take id from params
 	err := repository.Db.Where("id = ?", id).First(&user).Error // find user
 	if err != nil {
-		context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		context.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	context.BindJSON(&user)               // take the data from body
+	err = context.BindJSON(&user) // take the data from body
+	if err != nil {
+		context.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
 	err = repository.Db.Save(&user).Error // update user
 	if err != nil {
 		context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -128,7 +136,7 @@ func (repository *UserRepo) UpdateUser(context *gin.Context) {
 }
 
 // delete user
-func (repository *UserRepo) DeleteUser(context *gin.Context) {
+func (repository *UserRepo) deleteUser(context *gin.Context) {
 	var user User
 	id, _ := strconv.Atoi(context.Param("id"))                   // take id from params
 	err := repository.Db.Where("id = ?", id).Delete(&user).Error // delete user
