@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,7 +11,6 @@ import (
 )
 
 func main() {
-	fmt.Println("Hello,World")
 	r := setRouter()
 	r.Run()
 }
@@ -22,11 +20,12 @@ func setRouter() *gin.Engine {
 
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"message": "pang",
+			"message": "pong",
 		})
 	})
 
 	userRepo := New()
+
 	r.POST("/users", userRepo.CreateUser)
 	r.GET("/users", userRepo.GetUsers)
 	r.GET("/users/:id", userRepo.GetUser)
@@ -42,27 +41,21 @@ const DB_NAME = "db"
 const DB_HOST = "db"
 const DB_PORT = "3306"
 
-var Db *gorm.DB
-
-func initDb() *gorm.DB {
-	Db = connectDB()
-	return Db
-}
-
+// db connection
 func connectDB() *gorm.DB {
 	var err error
-	dsn := DB_USERNAME + ":" + DB_PASSWORD + "@tcp" + "(" + DB_HOST + ":" + DB_PORT + ")/" + DB_NAME + "?" + "parseTime=true&loc=Local"
-	fmt.Println("dsn : ", dsn)
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	DB_URI := DB_USERNAME + ":" + DB_PASSWORD + "@tcp" + "(" + DB_HOST + ":" + DB_PORT + ")/" + DB_NAME + "?" + "parseTime=true&loc=Local"
+	db, err := gorm.Open(mysql.Open(DB_URI), &gorm.Config{})
 
 	if err != nil {
-		fmt.Println("Error connecting to database :", err)
+		fmt.Println("Error db :", err)
 		return nil
 	}
 
 	return db
 }
 
+// User model
 type User struct {
 	gorm.Model
 	ID        int
@@ -71,126 +64,77 @@ type User struct {
 	Email     string
 }
 
-// create a user
-func CreateUserDB(db *gorm.DB, User *User) (err error) {
-	err = db.Create(User).Error
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// get users
-func GetUsersDB(db *gorm.DB, User *[]User) (err error) {
-	err = db.Find(User).Error
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// get user by id
-func GetUserDB(db *gorm.DB, User *User, id int) (err error) {
-	err = db.Where("id = ?", id).First(User).Error
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// update user
-func UpdateUserDB(db *gorm.DB, User *User) (err error) {
-	db.Save(User)
-	return nil
-}
-
-// delete user
-func DeleteUserDB(db *gorm.DB, User *User, id int) (err error) {
-	db.Where("id = ?", id).Delete(User)
-	return nil
-}
-
 type UserRepo struct {
 	Db *gorm.DB
 }
 
 func New() *UserRepo {
-	db := initDb()
+	db := connectDB()
 	db.AutoMigrate(&User{})
 	return &UserRepo{Db: db}
 }
 
 // create user
-func (repository *UserRepo) CreateUser(c *gin.Context) {
+func (repository *UserRepo) CreateUser(context *gin.Context) {
 	var user User
-	c.BindJSON(&user)
-	err := CreateUserDB(repository.Db, &user)
+	context.BindJSON(&user)                  // take the data from body
+	err := repository.Db.Create(&user).Error // save user to db
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err})
+		context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, user)
+	context.JSON(http.StatusOK, user)
 }
 
 // get users
-func (repository *UserRepo) GetUsers(c *gin.Context) {
+func (repository *UserRepo) GetUsers(context *gin.Context) {
 	var user []User
-	err := GetUsersDB(repository.Db, &user)
+	err := repository.Db.Find(&user).Error // get all users from db
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err})
+		context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, user)
+	context.JSON(http.StatusOK, user)
 }
 
 // get user by id
-func (repository *UserRepo) GetUser(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
+func (repository *UserRepo) GetUser(context *gin.Context) {
+	id, _ := strconv.Atoi(context.Param("id")) // take id from params
 	var user User
-	err := GetUserDB(repository.Db, &user, id)
+	err := repository.Db.Where("id = ?", id).First(&user).Error // find user
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.AbortWithStatus(http.StatusNotFound)
-			return
-		}
-
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err})
+		context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, user)
+	context.JSON(http.StatusOK, user)
 }
 
 // update user
-func (repository *UserRepo) UpdateUser(c *gin.Context) {
+func (repository *UserRepo) UpdateUser(context *gin.Context) {
 	var user User
-	id, _ := strconv.Atoi(c.Param("id"))
-	err := GetUserDB(repository.Db, &user, id)
+	id, _ := strconv.Atoi(context.Param("id"))                  // take id from params
+	err := repository.Db.Where("id = ?", id).First(&user).Error // find user
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.AbortWithStatus(http.StatusNotFound)
-			return
-		}
-
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err})
+		context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.BindJSON(&user)
-	err = UpdateUserDB(repository.Db, &user)
+	context.BindJSON(&user)               // take the data from body
+	err = repository.Db.Save(&user).Error // update user
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err})
+		context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, user)
+	context.JSON(http.StatusOK, user)
 }
 
 // delete user
-func (repository *UserRepo) DeleteUser(c *gin.Context) {
+func (repository *UserRepo) DeleteUser(context *gin.Context) {
 	var user User
-	id, _ := strconv.Atoi(c.Param("id"))
-	err := DeleteUserDB(repository.Db, &user, id)
+	id, _ := strconv.Atoi(context.Param("id"))                   // take id from params
+	err := repository.Db.Where("id = ?", id).Delete(&user).Error // delete user
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err})
+		context.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
+	context.JSON(http.StatusOK, gin.H{"message": "User deleted"})
 }
